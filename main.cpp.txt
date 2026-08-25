@@ -1,0 +1,306 @@
+#include <windows.h>
+#include <string>
+#include <sstream>
+#include <iomanip>
+
+using namespace std;
+
+HWND display;
+string current = "";
+double firstNumber = 0;
+char operation = '\0';
+bool newNumber = true;
+
+void updateDisplay()
+{
+    SetWindowTextA(display, current.empty() ? "0" : current.c_str());
+}
+
+double getNumber()
+{
+    try
+    {
+        return stod(current);
+    }
+    catch (...)
+    {
+        return 0;
+    }
+}
+
+void calculate()
+{
+    double secondNumber = getNumber();
+    double result = 0;
+
+    switch (operation)
+    {
+        case '+':
+            result = firstNumber + secondNumber;
+            break;
+
+        case '-':
+            result = firstNumber - secondNumber;
+            break;
+
+        case '*':
+            result = firstNumber * secondNumber;
+            break;
+
+        case '/':
+            if (secondNumber == 0)
+            {
+                current = "Error";
+                updateDisplay();
+                return;
+            }
+            result = firstNumber / secondNumber;
+            break;
+    }
+
+    ostringstream out;
+    out << setprecision(12) << result;
+
+    current = out.str();
+
+    if (current.find('.') != string::npos)
+    {
+        while (!current.empty() && current.back() == '0')
+            current.pop_back();
+
+        if (!current.empty() && current.back() == '.')
+            current.pop_back();
+    }
+
+    updateDisplay();
+}
+
+void buttonClicked(string value)
+{
+    if (value >= "0" && value <= "9")
+    {
+        if (newNumber || current == "Error")
+        {
+            current = value;
+            newNumber = false;
+        }
+        else
+        {
+            current += value;
+        }
+    }
+    else if (value == ".")
+    {
+        if (newNumber || current == "Error")
+        {
+            current = "0.";
+            newNumber = false;
+        }
+        else if (current.find('.') == string::npos)
+        {
+            current += ".";
+        }
+    }
+    else if (value == "C")
+    {
+        current = "";
+        firstNumber = 0;
+        operation = '\0';
+        newNumber = true;
+    }
+    else if (value == "DEL")
+    {
+        if (!current.empty())
+            current.pop_back();
+    }
+    else if (value == "+" || value == "-" ||
+             value == "*" || value == "/")
+    {
+        firstNumber = getNumber();
+        operation = value[0];
+        newNumber = true;
+    }
+    else if (value == "=")
+    {
+        if (operation != '\0')
+        {
+            calculate();
+            operation = '\0';
+            newNumber = true;
+        }
+    }
+    else if (value == "%")
+    {
+        double number = getNumber();
+        number /= 100;
+
+        ostringstream out;
+        out << setprecision(12) << number;
+        current = out.str();
+    }
+
+    updateDisplay();
+}
+
+LRESULT CALLBACK WindowProcedure(
+    HWND hwnd,
+    UINT msg,
+    WPARAM wp,
+    LPARAM lp)
+{
+    switch (msg)
+    {
+        case WM_COMMAND:
+        {
+            if (HIWORD(wp) == BN_CLICKED)
+            {
+                HWND button = (HWND)lp;
+
+                char text[20];
+                GetWindowTextA(button, text, sizeof(text));
+
+                buttonClicked(text);
+            }
+            break;
+        }
+
+        case WM_DESTROY:
+            PostQuitMessage(0);
+            break;
+
+        default:
+            return DefWindowProcA(hwnd, msg, wp, lp);
+    }
+
+    return 0;
+}
+
+int WINAPI WinMain(
+    HINSTANCE hInstance,
+    HINSTANCE hPrevInstance,
+    LPSTR lpCmdLine,
+    int nCmdShow)
+{
+    const char CLASS_NAME[] = "CalculatorWindow";
+
+    WNDCLASSA wc = {};
+
+    wc.lpfnWndProc = WindowProcedure;
+    wc.hInstance = hInstance;
+    wc.lpszClassName = CLASS_NAME;
+    wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+
+    RegisterClassA(&wc);
+
+    HWND hwnd = CreateWindowA(
+        CLASS_NAME,
+        "C++ GUI Calculator",
+        WS_OVERLAPPED | WS_CAPTION |
+        WS_SYSMENU | WS_MINIMIZEBOX,
+        500, 150,
+        360, 520,
+        NULL,
+        NULL,
+        hInstance,
+        NULL
+    );
+
+    if (hwnd == NULL)
+        return 0;
+
+    display = CreateWindowA(
+        "EDIT",
+        "0",
+        WS_CHILD | WS_VISIBLE |
+        ES_RIGHT | ES_READONLY,
+        20, 20,
+        300, 60,
+        hwnd,
+        NULL,
+        hInstance,
+        NULL
+    );
+
+    HFONT font = CreateFontA(
+        28, 0, 0, 0,
+        FW_NORMAL,
+        FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET,
+        OUT_DEFAULT_PRECIS,
+        CLIP_DEFAULT_PRECIS,
+        DEFAULT_QUALITY,
+        DEFAULT_PITCH | FF_DONTCARE,
+        "Arial"
+    );
+
+    SendMessageA(display, WM_SETFONT,
+                 (WPARAM)font, TRUE);
+
+    string buttons[20] =
+    {
+        "C", "DEL", "%", "/",
+        "7", "8", "9", "*",
+        "4", "5", "6", "-",
+        "1", "2", "3", "+",
+        "0", ".", "="
+    };
+
+    int x = 20;
+    int y = 100;
+    int width = 70;
+    int height = 55;
+    int gap = 10;
+
+    for (int i = 0; i < 19; i++)
+    {
+        int row = i / 4;
+        int col = i % 4;
+
+        x = 20 + col * (width + gap);
+        y = 100 + row * (height + gap);
+
+        HWND button = CreateWindowA(
+            "BUTTON",
+            buttons[i].c_str(),
+            WS_CHILD | WS_VISIBLE |
+            BS_PUSHBUTTON,
+            x, y,
+            width, height,
+            hwnd,
+            (HMENU)(100 + i),
+            hInstance,
+            NULL
+        );
+
+        SendMessageA(button, WM_SETFONT,
+                     (WPARAM)font, TRUE);
+    }
+
+    // Make the zero button wider
+    HWND zeroButton = GetDlgItem(hwnd, 118);
+
+    if (zeroButton)
+    {
+        SetWindowPos(
+            zeroButton,
+            NULL,
+            20, 425,
+            150, 55,
+            SWP_NOZORDER
+        );
+    }
+
+    ShowWindow(hwnd, nCmdShow);
+    UpdateWindow(hwnd);
+
+    MSG msg = {};
+
+    while (GetMessageA(&msg, NULL, 0, 0))
+    {
+        TranslateMessage(&msg);
+        DispatchMessageA(&msg);
+    }
+
+    return 0;
+}
